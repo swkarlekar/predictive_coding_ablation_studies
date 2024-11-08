@@ -8,12 +8,25 @@ import torch
 from tqdm import tqdm
 import matplotlib.pyplot as plt
 import torch.nn.functional as F
-from experiment_configs import p_lr_exp_configs, x_lr_exp_configs
 
+## Define all parameters we can tweak ##
 
+# Model parameters
+input_size = 28*28  # 28x28 images
+hidden_size = 256
+output_size = 10    # 10 classes
+activation_fn = nn.ReLU
+loss_fn = lambda output, _target: 0.5 * (output - _target).pow(2).sum() # this loss function holds to the error of the output layer of the model
 
-exp_configs = p_lr_exp_configs
-# max_epochs = max(epochs.values())
+# Trainer parameters 
+T = 20 
+optimizer_x_fn = optim.SGD
+x_lr = 0.01
+optimizer_p_fn = optim.Adam  
+p_lr = 0.001
+
+# Training parameters
+epochs = 10 
 
 ## Initialize the model and trainer ##
 
@@ -37,31 +50,30 @@ def test(model):
 # Initialize dictionaries to store accuracy and final loss
 accuracy_per_lr = {}
 final_losses = []
-for x_lr in exp_configs["trainer"]["x_lr"]:
-    for p_lr in exp_configs["trainer"]["p_lr"]: 
-        model = PCModel(**exp_configs['model']).model
-        trainer = PCTrainer(exp_configs['trainer']['T'], model, exp_configs['trainer']['optimizer_x_fn'], x_lr, exp_configs['trainer']['optimizer_p_fn'], p_lr).trainer
-        ## Train the model ##
-        eps = exp_configs['training']['epochs'][p_lr]
-        test_acc = np.zeros(eps + 1)
-        test_acc[0] = test(model)
-        for epoch in range(eps):
-            # Initialize the tqdm progress bar
-            print(train_loader)
-            with tqdm(train_loader, desc=f'Epoch {epoch+1} - Test accuracy: {test_acc[epoch]:.3f}') as pbar:
-                for data, label in pbar:
-                    data, label = data.to(device), label.to(device)
-                    # convert labels to one-hot encoding
-                    label = F.one_hot(label, num_classes=output_size).float()
-                    trainer.train_on_batch(
-                        inputs=data,
-                        loss_fn=lambda output, _target: 0.5 * (output - _target).pow(2).sum(),
-                        loss_fn_kwargs={'_target': label}
-                    )
-            test_acc[epoch + 1] = test(model)
-            pbar.set_description(f'Epoch {epoch + 1} - Test accuracy: {test_acc[epoch + 1]:.3f}')
-        accuracy_per_lr[p_lr] = test_acc
-        final_losses.append((p_lr, accuracy_per_lr[p_lr][-1]))
+for p_lr in p_lrs: 
+    model = PCModel(input_size, hidden_size, output_size, activation_fn).model
+    trainer = PCTrainer(T, model, optimizer_x_fn, x_lr, optimizer_p_fn, p_lr).trainer
+    ## Train the model ##
+    eps = epochs[p_lr]
+    test_acc = np.zeros(eps + 1)
+    test_acc[0] = test(model)
+    for epoch in range(eps):
+        # Initialize the tqdm progress bar
+        print(train_loader)
+        with tqdm(train_loader, desc=f'Epoch {epoch+1} - Test accuracy: {test_acc[epoch]:.3f}') as pbar:
+            for data, label in pbar:
+                data, label = data.to(device), label.to(device)
+                # convert labels to one-hot encoding
+                label = F.one_hot(label, num_classes=output_size).float()
+                trainer.train_on_batch(
+                    inputs=data,
+                    loss_fn=loss_fn,
+                    loss_fn_kwargs={'_target': label}
+                )
+        test_acc[epoch + 1] = test(model)
+        pbar.set_description(f'Epoch {epoch + 1} - Test accuracy: {test_acc[epoch + 1]:.3f}')
+    accuracy_per_lr[p_lr] = test_acc
+    final_losses.append((p_lr, accuracy_per_lr[p_lr][-1]))
     
 
 # Plot (1): Test accuracy across epochs for each learning rate
