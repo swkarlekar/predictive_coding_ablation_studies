@@ -1,7 +1,8 @@
 from pc_model import PCModel
 from config import device
 from pc_trainer import PCTrainer
-
+import torch.nn as nn
+import torch.optim as optim
 import numpy as np 
 from data_loader import load_data
 import torch 
@@ -21,12 +22,25 @@ loss_fn = lambda output, _target: 0.5 * (output - _target).pow(2).sum() # this l
 # Trainer parameters 
 T = 20 
 optimizer_x_fn = optim.SGD
-x_lr = 0.01
+x_lr = 0.1
+# Test different learning rates
+# x_lrs = [0.5, 0.1, 0.05, 0.01, 0.005, 0.001, 0.0005, 0.0001]
 optimizer_p_fn = optim.Adam  
-p_lr = 0.001
+# p_lr = 0.001
+p_lrs = [0.5, 0.1, 0.05, 0.01, 0.005, 0.001, 0.0005, 0.0001]
 
 # Training parameters
-epochs = 10 
+epochs = {
+    0.5: 2,
+    0.1: 2,
+    0.05: 2,
+    0.01: 2,
+    0.005: 2,
+    0.001: 2,
+    0.0005: 2,
+    0.0001: 2
+}
+max_epochs = max(epochs.values())
 
 ## Initialize the model and trainer ##
 
@@ -50,13 +64,17 @@ def test(model):
 # Initialize dictionaries to store accuracy and final loss
 accuracy_per_lr = {}
 final_losses = []
+param_magnitudes = {}
 for p_lr in p_lrs: 
-    model = PCModel(input_size, hidden_size, output_size, activation_fn).model
+    wrapper = PCModel(input_size, hidden_size, output_size, activation_fn)
+    model = wrapper.model
     trainer = PCTrainer(T, model, optimizer_x_fn, x_lr, optimizer_p_fn, p_lr).trainer
     ## Train the model ##
     eps = epochs[p_lr]
     test_acc = np.zeros(eps + 1)
     test_acc[0] = test(model)
+    param_mags = np.zeros(eps + 1)
+    param_mags[0] = wrapper.get_parameter_magnitudes()
     for epoch in range(eps):
         # Initialize the tqdm progress bar
         print(train_loader)
@@ -71,8 +89,10 @@ for p_lr in p_lrs:
                     loss_fn_kwargs={'_target': label}
                 )
         test_acc[epoch + 1] = test(model)
+        param_mags[epoch + 1] = wrapper.get_parameter_magnitudes()
         pbar.set_description(f'Epoch {epoch + 1} - Test accuracy: {test_acc[epoch + 1]:.3f}')
     accuracy_per_lr[p_lr] = test_acc
+    param_magnitudes[p_lr] = param_mags
     final_losses.append((p_lr, accuracy_per_lr[p_lr][-1]))
     
 
@@ -100,4 +120,18 @@ plt.xscale('log')
 plt.title('Final Test Accuracy for Each Learning Rate')
 plt.grid(True)
 plt.savefig("final_test_acc_p_lr.png")
+plt.show()
+
+# Plot (3): Param magnitudes across epochs for each learning rate
+plt.figure(figsize=(12, 8))
+for p_lr, param_mag in param_magnitudes.items():
+    # Pad the param_mag to max_epochs
+    param_mag = np.append(param_mag, [param_mag[-1]] * (max_epochs + 1 - len(param_mag)))
+    plt.plot(range(max_epochs + 1), param_mag, label=f'LR={p_lr}')
+plt.xlabel('Epoch')
+plt.ylabel('Parameter Magnitudes')
+plt.legend()
+plt.title('Parameter Magnitudes Across Epochs for Different Learning Rates')
+plt.grid(True)
+plt.savefig("param_magnitudes_epochs_p_lr.png")
 plt.show()

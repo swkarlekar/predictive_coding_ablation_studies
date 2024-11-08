@@ -17,3 +17,9 @@ class PCModel:
         )
         self.model.train()
         self.model.to(device)
+        
+    def get_parameter_magnitudes(self):
+        magnitudes = {}
+        for name, param in self.model.named_parameters():
+            magnitudes[name] = param.norm().item()
+        return sum(magnitudes.values())
